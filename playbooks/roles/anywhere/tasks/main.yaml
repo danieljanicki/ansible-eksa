@@ -1,0 +1,57 @@
+- name: Set eksctl anywhere version is not defined
+  block:
+    - name: dowload manifest with anywhere version
+      ansible.builtin.get_url:
+        url: "https://anywhere-assets.eks.amazonaws.com/releases/eks-a/manifest.yaml"
+        dest: "/tmp/manifest.yaml"
+        mode: '0644'
+    - name: get latest version from manifest
+      ansible.builtin.command: "yq '.spec.latestVersion' /tmp/manifest.yaml"
+      register: latest_version
+    
+    - name: set latest version from manifest
+      ansible.builtin.set_fact:
+        VERSION_ANYWHERE_INSTALL={{ latest_version.stdout_lines[0] | regex_replace('^\"(.*)\"$', '\\1') }}
+  when: VERSION_ANYWHERE_INSTALL is not defined
+  #example version v0.199.0
+
+- name: dowload manifest with anywhere url version
+  ansible.builtin.get_url:
+    url: "https://anywhere-assets.eks.amazonaws.com/releases/eks-a/manifest.yaml"
+    dest: "/tmp/manifest.yaml"
+
+- name: Get system architecture for uname
+  command: uname -s
+  register: uname_output
+  changed_when: false
+
+- name: Convert uname to lowercase
+  set_fact:
+    system_architecture: "{{ uname_output.stdout | lower }}"
+
+- name: Get the URI for the specified release version
+  command: >
+    yq '.spec.releases[] | select(.version=="{{ VERSION_ANYWHERE_INSTALL }}") | .eksABinary.{{ system_architecture }}.uri' /tmp/manifest.yaml
+  register: eksa_binary_uri
+
+- name: Extract eksctl anywhere tarball
+  become: true
+  ansible.builtin.unarchive:
+    src: "{{ eksa_binary_uri.stdout_lines[0] | regex_replace('^\"(.*)\"$', '\\1') }}"
+    dest: /tmp/
+    remote_src: yes
+
+- name: copy file eksctl anywhere
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: /tmp/eksctl-anywhere
+    dest: /usr/local/bin/eksctl-anywhere_{{ VERSION_ANYWHERE_INSTALL }}
+    mode: '0755'
+
+- name: create symbolic link
+  become: true
+  ansible.builtin.file:
+    src: /usr/local/bin/eksctl-anywhere_{{ VERSION_ANYWHERE_INSTALL }}
+    dest: /usr/local/bin/eksctl-anywhere
+    state: link
