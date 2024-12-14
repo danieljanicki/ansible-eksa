@@ -1,0 +1,44 @@
+- name: Set eksctl version is not defined
+  ansible.builtin.set_fact:
+    URL_EKSCTL_VERSION="/download/{{ VERSION_EKSCTL_INSTALL }}/"
+  when: VERSION_EKSCTL_INSTALL is defined and VERSION_EKSCTL_INSTALL != "latest"
+  #example version v0.199.0
+
+- name: Set eksctl version is not defined
+  ansible.builtin.set_fact:
+    VERSION_EKSCTL_INSTALL="latest"
+    URL_EKSCTL_VERSION="/latest/download/"
+  when: VERSION_EKSCTL_INSTALL is not defined or URL_EKSCTL_VERSION is not defined
+  #example version v0.199.0
+
+- name: Extract eksctl tarball
+  ansible.builtin.unarchive:
+    src: "https://github.com/eksctl-io/eksctl/releases{{ URL_EKSCTL_VERSION }}eksctl_{{ ansible_system | lower }}_{{ architecture_map[ansible_architecture] | default('unknown') }}.tar.gz"
+    dest: /tmp/
+    remote_src: yes
+
+- name: Get version from unarchive
+  ansible.builtin.command: /tmp/eksctl version
+  register: myoutput
+
+- name: create folder
+  become: true
+  ansible.builtin.file:
+    path: /usr/local/bin/
+    state: directory
+    mode: '0755'
+
+- name: move file eksctl
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: /tmp/eksctl
+    dest: /usr/local/bin/eksctl_{{ myoutput.stdout_lines[0] }}
+    mode: '0755'
+
+- name: create symbolic link
+  become: true
+  ansible.builtin.file:
+    src: /usr/local/bin/eksctl_{{ myoutput.stdout_lines[0] }}
+    dest: /usr/local/bin/eksctl
+    state: link
