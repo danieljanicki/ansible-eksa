@@ -1,0 +1,47 @@
+- name: Set kubectl version is not defined
+  block:
+    - name: dowload file with latest version
+      become: true
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/stable.txt"
+        dest: "/tmp/stable.txt"
+        mode: '0644'
+    - name: get latest version from file
+      ansible.builtin.command: "cat /tmp/stable.txt"
+      register: latest_version
+    
+    - name: set latest version
+      ansible.builtin.set_fact:
+        VERSION_KUBECTL_INSTALL={{ latest_version.stdout_lines[0] | regex_replace('^\"(.*)\"$', '\\1') }}
+  when: VERSION_KUBECTL_INSTALL is not defined
+  #example version v0.199.0
+
+- name: Get system architecture for uname
+  command: uname -s
+  register: uname_output
+  changed_when: false
+
+- name: Convert uname to lowercase
+  set_fact:
+    system_architecture: "{{ uname_output.stdout | lower }}"
+
+- name: Extract kubectl tarball
+  become: true
+  ansible.builtin.get_url:
+    url: "https://cdn.dl.k8s.io/release/{{ VERSION_KUBECTL_INSTALL }}/bin/{{ system_architecture }}/{{ architecture_map[ansible_architecture] | default('unknown') }}/kubectl"
+    dest: /tmp/
+
+- name: copy file kubectl
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: /tmp/kubectl
+    dest: /usr/local/bin/kubectl_{{ VERSION_KUBECTL_INSTALL }}
+    mode: '0755'
+
+- name: create symbolic link
+  become: true
+  ansible.builtin.file:
+    src: /usr/local/bin/kubectl_{{ VERSION_KUBECTL_INSTALL }}
+    dest: /usr/local/bin/kubectl
+    state: link
