@@ -1,0 +1,6 @@
+- hosts: adminmachine
+
+  roles:
+    - eksctl
+    - anywhere
+    - kubectl
